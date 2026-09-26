@@ -53,6 +53,7 @@ void hashmap_clear_entries(struct hashmap *hashmap);
 // Calls hashmap_clear_entries before
 void hashmap_free(struct hashmap *hashmap);
 
+// Breaks if loop_function returns non-zero value, returns last return value of loop_function
 int hashmap_loop_entries(struct hashmap *hashmap, int (*loop_function)(struct hashmap_entry *entry, void *ctx),
                          void *ctx);
 #endif // SOPHUTIL_HASHMAP_H
