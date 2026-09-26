@@ -26,9 +26,8 @@ static struct opt_size_t safe_add(const size_t a, const size_t b) {
 		var = temp_opt.value;                  \
 	}
 
-struct builder_buffer *resize_buffer(struct builder_buffer *old, const size_t n, const size_t size,
-                                     const bool shrink_allocation) {
-	struct builder_buffer buf = *old;
+struct buffer_builder *buffer_builder_resize(struct buffer_builder *old, const size_t n, const size_t size, const bool shrink_allocation) {
+	struct buffer_builder buf = *old;
 
 	if (buf.allocated < 1 || shrink_allocation) buf.allocated = 1;
 	IF_SET(safe_multiply(n, size), struct opt_size_t, buf.size, return nullptr;)
@@ -36,32 +35,32 @@ struct builder_buffer *resize_buffer(struct builder_buffer *old, const size_t n,
 	else
 		while (buf.allocated < buf.size) buf.allocated *= 2;
 
-	buf.data = buf.data ? old->malloc.realloc(buf.data, buf.allocated) : old->malloc.malloc(buf.allocated);
+	buf.data = buf.data ? buf.malloc.realloc(buf.data, buf.allocated) : buf.malloc.malloc(buf.allocated);
 	if (!buf.data) return nullptr;
 
 	*old = buf;
 	return old;
 }
 
-struct builder_buffer *grow_buffer(struct builder_buffer *buf, size_t n, size_t size) {
+struct buffer_builder *buffer_builder_grow(struct buffer_builder *buf, size_t n, size_t size) {
 	size_t add_size, new_size;
 	IF_SET(safe_multiply(n, size), struct opt_size_t, add_size, return nullptr;)
 	const size_t old_size = buf->size;
 	IF_SET(safe_add(add_size, old_size), struct opt_size_t, new_size, return nullptr;)
 
-	buf = resize_buffer(buf, new_size, 1, false);
+	buf = buffer_builder_resize(buf, new_size, 1, false);
 	if (!buf) return nullptr;
 
 	return buf;
 }
 
-struct builder_buffer *append_buffer(struct builder_buffer *buf, const void *data, size_t n, size_t size) {
+struct buffer_builder *buffer_builder_append(struct buffer_builder *buf, const void *data, size_t n, size_t size) {
 	size_t add_size, new_size;
 	IF_SET(safe_multiply(n, size), struct opt_size_t, add_size, return nullptr;)
 	const size_t old_size = buf->size;
 	IF_SET(safe_add(add_size, old_size), struct opt_size_t, new_size, return nullptr;)
 
-	buf = resize_buffer(buf, new_size, 1, false);
+	buf = buffer_builder_resize(buf, new_size, 1, false);
 	if (!buf) return nullptr;
 
 	memcpy(buf->data + old_size, data, add_size);
@@ -69,18 +68,33 @@ struct builder_buffer *append_buffer(struct builder_buffer *buf, const void *dat
 	return buf;
 }
 
-struct builder_buffer *append_string_buffer(struct builder_buffer *buf, const char *string) {
-	const size_t string_len = strlen(string);
+static struct buffer_builder *buffer_builder_append_str_internal(struct buffer_builder *buf, const char *string, const size_t string_len) {
 	size_t add_len = string_len;
 	if (buf->size == 0) IF_SET(safe_add(add_len, 1), struct opt_size_t, add_len, return nullptr;)
 
 	size_t new_offset = buf->size;
 	if (new_offset > 0) new_offset -= 1;
 
-	buf = grow_buffer(buf, sizeof(*string), add_len);
+	buf = buffer_builder_grow(buf, sizeof(*string), add_len);
 	if (!buf) return nullptr;
 
 	memcpy(buf->data + new_offset, string, string_len + 1);
 
 	return buf;
+}
+
+struct buffer_builder *buffer_builder_append_str(struct buffer_builder *buf, const char *string) {
+	return buffer_builder_append_str_internal(buf, string, strlen(string));
+}
+
+struct buffer_builder *buffer_builder_append_strn(struct buffer_builder *buf, const char *string, size_t max_len) {
+	return buffer_builder_append_str_internal(buf, string, strnlen(string, max_len));
+}
+
+void buffer_builder_free(struct buffer_builder *buf) {
+	if (!buf) return;
+	buf->malloc.free(buf->data);
+	buf->data = nullptr;
+	buf->allocated = 0;
+	buf->size = 0;
 }
